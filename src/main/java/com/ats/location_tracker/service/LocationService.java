@@ -11,7 +11,33 @@ import com.ats.location_tracker.repository.DeviceLocationRepository;
 import lombok.RequiredArgsConstructor;
 
 @Service
-@RequiredArgsConstructor
+public class LocationService {
+
+    private final DeviceLocationRepository repository;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    public LocationService(DeviceLocationRepository repository,
+                           SimpMessagingTemplate messagingTemplate) {
+        this.repository = repository;
+        this.messagingTemplate = messagingTemplate;
+    }
+
+    public DeviceLocation saveAndBroadcast(DeviceLocation location) {
+
+        // 1. Save to DB
+        DeviceLocation saved = repository.save(location);
+
+        // 2. Broadcast real-time update
+        messagingTemplate.convertAndSend(
+            "/topic/location/" + saved.getDeviceId(),
+            saved
+        );
+
+        return saved;
+    }
+ 
+}
+/*@RequiredArgsConstructor
 public class LocationService {
 
     private final DeviceLocationRepository repo;
@@ -27,4 +53,4 @@ public class LocationService {
     public Optional<DeviceLocation> getLatest(String deviceId) {
         return repo.findTopByDeviceIdOrderByCreatedAtDesc(deviceId);
     }
-}
+}*/
