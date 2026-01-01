@@ -1,5 +1,6 @@
 package com.ats.location_tracker.service;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -35,7 +36,9 @@ public class LocationService {
 
         return saved;
     }
- 
+    public List<DeviceLocation> getHistory(String deviceId) {
+        return repository.findByDeviceIdOrderByCreatedAtAsc(deviceId);
+    }
 }
 /*@RequiredArgsConstructor
 public class LocationService {

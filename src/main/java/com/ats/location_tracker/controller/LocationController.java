@@ -1,5 +1,7 @@
 package com.ats.location_tracker.controller;
 
+import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,6 +27,13 @@ public class LocationController {
 		locationService.saveAndBroadcast(location);
 		return ResponseEntity.ok("Location updated & broadcasted");
 	}
+	
+	@GetMapping("/history/{deviceId}")
+	public List<DeviceLocation> history(@PathVariable String deviceId) {
+	    return locationService.getHistory(deviceId);
+	}
+	
+
    
 	/*
 	 * private final DeviceLocationRepository repository;

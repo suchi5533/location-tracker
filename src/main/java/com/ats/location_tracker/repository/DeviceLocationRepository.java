@@ -2,6 +2,7 @@
 package com.ats.location_tracker.repository;
 
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -9,7 +10,10 @@ import com.ats.location_tracker.entity.DeviceLocation;
 
 
 public interface DeviceLocationRepository
-        extends JpaRepository<DeviceLocation, Long> {
+extends JpaRepository<DeviceLocation, Long> {
 
-    Optional<DeviceLocation> findTopByDeviceIdOrderByCreatedAtDesc(String deviceId);
+Optional<DeviceLocation> findTopByDeviceIdOrderByCreatedAtDesc(String deviceId);
+
+List<DeviceLocation> findByDeviceIdOrderByCreatedAtAsc(String deviceId);
 }
+

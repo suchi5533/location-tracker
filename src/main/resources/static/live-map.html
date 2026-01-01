@@ -1,19 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Live Location Tracking</title>
+    <title>Live & Playback Tracking</title>
     <meta charset="UTF-8">
 
-    <!-- Leaflet CSS -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    />
-
-    <!-- Leaflet JS -->
+    <!-- Leaflet -->
+    <link rel="stylesheet"
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- SockJS & STOMP -->
+    <!-- SockJS + STOMP -->
     <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
 
@@ -26,124 +22,193 @@
             height: 100vh;
             width: 100%;
         }
-    </style>
-</head>
-<body>
-
-<div id="map"></div>
-
-<script>
-    const deviceId = "EMP002"; // 🔁 change device id if needed
-
-    // Initial map position
-    const map = L.map('map').setView([18.5204, 73.8567], 16);
-
-    // OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
-
-    // Marker
-    const marker = L.marker([18.5204, 73.8567]).addTo(map);
-
-    function connectWebSocket() {
-        const socket = new SockJS('/ws');
-        const stompClient = Stomp.over(socket);
-
-        stompClient.debug = null; // silence logs
-
-        stompClient.connect({}, () => {
-            console.log("WebSocket connected");
-
-            stompClient.subscribe("/topic/location/" + deviceId, message => {
-                const data = JSON.parse(message.body);
-
-                const latLng = [data.latitude, data.longitude];
-                marker.setLatLng(latLng);
-                map.setView(latLng);
-            });
-        }, () => {
-            console.warn("WebSocket disconnected, retrying...");
-            setTimeout(connectWebSocket, 3000);
-        });
-    }
-
-    connectWebSocket();
-</script>
-
-</body>
-</html>
-
-<!-- <!DOCTYPE html>
-<html>
-<head>
-    <title>Live Location Tracking</title>
-    <meta charset="UTF-8">
-
-    Google Maps
-    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY"></script>
-
-    SockJS & STOMP
-    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
-
-    <style>
-        #map {
-            height: 100vh;
-            width: 100%;
+        #controls {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 6px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+        }
+        #controls button {
+            margin: 3px;
         }
     </style>
 </head>
 <body>
 
+<div id="controls">
+    <b>Mode:</b><br/>
+    <button onclick="startLive()">Live</button>
+    <button onclick="loadPlayback()">Playback</button>
+    <hr/>
+    <button onclick="startPlayback()">Play</button>
+    <button onclick="pausePlayback()">Pause</button>
+    <button onclick="resetPlayback()">Reset</button>
+    <hr/>
+    <b>Speed:</b><br/>
+    <button onclick="setSpeed(2000)">Slow</button>
+    <button onclick="setSpeed(1000)">Normal</button>
+    <button onclick="setSpeed(300)">Fast</button>
+</div>
+
 <div id="map"></div>
 
 <script>
-    let map;
-    let marker;
-    const deviceId = "EMP002";   // 👈 change device here
+    // CONFIG
+    const deviceId = "USER_01";   // 🔁 change if needed
 
-    function initMap() {
-        const initialPos = { lat: 18.5204, lng: 73.8567 };
+    // MAP INIT
+    const map = L.map('map').setView([18.5204, 73.8567], 16);
 
-        map = new google.maps.Map(document.getElementById("map"), {
-            zoom: 16,
-            center: initialPos
-        });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19
+    }).addTo(map);
 
-        marker = new google.maps.Marker({
-            position: initialPos,
-            map: map,
-            title: deviceId
-        });
-    }
+    const marker = L.marker([18.5204, 73.8567]).addTo(map);
+    const trail = L.polyline([], { color: 'blue', weight: 4 }).addTo(map);
 
-    function connectWebSocket() {
-        const socket = new SockJS("http://localhost:8090/ws");
-        const stompClient = Stomp.over(socket);
+    // LIVE (WebSocket)
+    let stompClient = null;
 
-        stompClient.connect({}, function () {
-            console.log("WebSocket connected");
+    function startLive() {
+        cleanupPlayback();
+        trail.setLatLngs([]);
 
-            stompClient.subscribe("/topic/location/" + deviceId, function (message) {
-                const data = JSON.parse(message.body);
+        if (stompClient && stompClient.connected) return;
 
-                const newPos = {
-                    lat: data.latitude,
-                    lng: data.longitude
-                };
+        const socket = new SockJS('/ws');
+        stompClient = Stomp.over(socket);
+        stompClient.debug = null;
 
-                marker.setPosition(newPos);
-                map.setCenter(newPos);
+        stompClient.connect({}, () => {
+            console.log("LIVE mode connected");
+
+            stompClient.subscribe("/topic/location/" + deviceId, msg => {
+                const data = JSON.parse(msg.body);
+                const latLng = [data.latitude, data.longitude];
+
+                marker.setLatLng(latLng);
+                trail.addLatLng(latLng);
+                map.setView(latLng);
             });
         });
     }
 
-    initMap();
-    connectWebSocket();
+    // PLAYBACK
+    let historyData = [];
+    let playbackIndex = 0;
+    let playbackTimer = null;
+    let playbackSpeed = 1000;
+    let speedMultiplier = 1;
+
+
+    function loadPlayback() {
+        cleanupLive();
+        resetPlayback();
+
+        fetch(`/api/location/history/${deviceId}`)
+            .then(res => res.json())
+            .then(data => {
+                historyData = data;
+
+                if (historyData.length === 0) {
+                    alert("No playback data found");
+                    return;
+                }
+
+                const first = historyData[0];
+                const latLng = [first.latitude, first.longitude];
+
+                marker.setLatLng(latLng);
+                map.setView(latLng, 17);
+
+                console.log("Playback history loaded:", historyData.length);
+                alert("Playback ready. Click Play.");
+            });
+    }
+
+    function playNextPoint() {
+        if (playbackIndex >= historyData.length - 1) return;
+
+        const current = historyData[playbackIndex];
+        const next = historyData[playbackIndex + 1];
+
+        const currTime = new Date(current.createdAt).getTime();
+        const nextTime = new Date(next.createdAt).getTime();
+
+       
+        let delay = (nextTime - currTime) / speedMultiplier;
+
+
+        // Safety limits (VERY IMPORTANT)
+        if (delay < 200) delay = 200;       // minimum delay
+        if (delay > 7000) delay = 5000;     // maximum delay
+
+        const latLng = [current.latitude, current.longitude];
+        marker.setLatLng(latLng);
+        trail.addLatLng(latLng);
+        map.setView(latLng);
+
+        playbackIndex++;
+
+        playbackTimer = setTimeout(playNextPoint, delay);
+    }
+
+    function startPlayback() {
+        if (historyData.length < 2) {
+            alert("Not enough data for playback");
+            return;
+        }
+
+        playbackIndex = 0;
+        playNextPoint();
+    }
+
+
+    function pausePlayback() {
+        clearTimeout(playbackTimer);
+        playbackTimer = null;
+    }
+
+    function resetPlayback() {
+        pausePlayback();
+        playbackIndex = 0;
+        trail.setLatLngs([]);
+
+        if (historyData.length > 0) {
+            const first = historyData[0];
+            marker.setLatLng([first.latitude, first.longitude]);
+            map.setView([first.latitude, first.longitude], 17);
+        }
+    }
+
+
+    function setSpeed(ms) {
+        speedMultiplier = ms / 1000;  // normalize
+    }
+
+
+    // CLEANUP HELPERS
+    function cleanupLive() {
+        if (stompClient && stompClient.connected) {
+            stompClient.disconnect();
+            stompClient = null;
+            console.log("LIVE mode stopped");
+        }
+    }
+
+    function cleanupPlayback() {
+        pausePlayback();
+        historyData = [];
+        playbackIndex = 0;
+    }
+
+    // DEFAULT MODE
+    startLive();
 </script>
 
 </body>
 </html>
- -->
